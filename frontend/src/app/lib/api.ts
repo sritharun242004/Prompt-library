@@ -1,0 +1,185 @@
+const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "http://localhost:3000";
+
+// ─── Token helpers ────────────────────────────────────────────────────────────
+
+export const token = {
+  get: (): string | null => localStorage.getItem("pv_token"),
+  set: (t: string) => localStorage.setItem("pv_token", t),
+  clear: () => localStorage.removeItem("pv_token"),
+};
+
+export const authStore = {
+  getUser: () => {
+    try {
+      const raw = localStorage.getItem("pv_user");
+      return raw ? (JSON.parse(raw) as AuthUser) : null;
+    } catch {
+      return null;
+    }
+  },
+  setUser: (u: AuthUser) => localStorage.setItem("pv_user", JSON.stringify(u)),
+  clear: () => { token.clear(); localStorage.removeItem("pv_user"); },
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  isAdmin: boolean;
+}
+
+export interface ProfileStats {
+  saved: number;
+  copied: number;
+  submitted: number;
+  approved: number;
+}
+
+export interface SubmitPayload {
+  title: string;
+  description?: string;
+  family: string;
+  categoryId?: string;
+  basePrompt: string;
+  platformIds: string[];
+  variables?: { name: string; placeholder?: string }[];
+  exampleOutput?: string;
+}
+
+// ─── Core fetch ───────────────────────────────────────────────────────────────
+
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const t = token.get();
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(t ? { Authorization: `Bearer ${t}` } : {}),
+      ...(options?.headers ?? {}),
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Request failed" }));
+    throw new Error((err as any).error ?? "Request failed");
+  }
+  return res.json() as Promise<T>;
+}
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+export const authApi = {
+  login: async (email: string, password: string) => {
+    const data = await apiFetch<{ user: AuthUser; token: string }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+    token.set(data.token);
+    authStore.setUser(data.user);
+    return data;
+  },
+
+  register: async (email: string, password: string, displayName: string) => {
+    const data = await apiFetch<{ user: AuthUser; token: string }>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password, displayName }),
+    });
+    token.set(data.token);
+    authStore.setUser(data.user);
+    return data;
+  },
+
+  logout: () => authStore.clear(),
+};
+
+// ─── Prompts ──────────────────────────────────────────────────────────────────
+
+export const promptsApi = {
+  copy: (id: string, platformId?: string) =>
+    apiFetch<{ success: boolean }>(`/api/prompts/${id}/copy`, {
+      method: "POST",
+      body: JSON.stringify({ platformId }),
+    }),
+
+  save: (id: string) =>
+    apiFetch<{ saved: boolean }>(`/api/prompts/${id}/save`, { method: "POST" }),
+};
+
+// ─── Submissions ──────────────────────────────────────────────────────────────
+
+export const submissionsApi = {
+  submit: (payload: SubmitPayload) =>
+    apiFetch<{ id: string; status: string }>("/api/submissions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+};
+
+// ─── Profile ──────────────────────────────────────────────────────────────────
+
+export const profileApi = {
+  stats: () => apiFetch<ProfileStats>("/api/profile/stats"),
+};
+
+// ─── Library ──────────────────────────────────────────────────────────────────
+
+export interface LibraryPrompt {
+  id: number;
+  slug: string;
+  title: string;
+  base_prompt: string;
+  category: string;
+  sub_category: string;
+  prompt_type: string;
+  tags: string[];
+  quality_score: number;
+  tested: boolean;
+  image_url: string;
+  created_at: string;
+}
+
+export interface LibraryPage {
+  data: LibraryPrompt[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface LibrarySearchPage extends LibraryPage {
+  query: string;
+  mode: "fulltext" | "fuzzy" | "none";
+}
+
+export const libraryApi = {
+  categories: () =>
+    apiFetch<{ category: string; count: number }[]>("/api/library/categories"),
+
+  tags: (limit = 30) =>
+    apiFetch<{ tag: string; count: number }[]>(`/api/library/tags?limit=${limit}`),
+
+  list: (params: { category?: string; tags?: string; page?: number; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params.category) qs.set("category", params.category);
+    if (params.tags) qs.set("tags", params.tags);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    return apiFetch<LibraryPage>(`/api/library/prompts?${qs}`);
+  },
+
+  search: (params: { q: string; mode?: "fulltext" | "fuzzy" | "both"; category?: string; tags?: string; page?: number; limit?: number }) => {
+    const qs = new URLSearchParams();
+    qs.set("q", params.q);
+    if (params.mode) qs.set("mode", params.mode);
+    if (params.category) qs.set("category", params.category);
+    if (params.tags) qs.set("tags", params.tags);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    return apiFetch<LibrarySearchPage>(`/api/library/prompts/search?${qs}`);
+  },
+
+  getById: (id: number) =>
+    apiFetch<LibraryPrompt & { platforms: Record<string, string> }>(`/api/library/prompts/${id}`),
+};
