@@ -1,13 +1,29 @@
 // ─── Rule-Based Video Improver ──────────────────────────────────────────────────
 // Enriches weak/vague video prompts using rule-based expansion — no API calls.
-// Strategy: parse → detect gaps → inject motion/camera/setting detail → add locks.
+// Strategy: parse → detect gaps → inject motion/camera/setting detail → assemble
+// the same Motion Formula v2.0 structure the builder uses (15-section core +
+// 6-section Advanced Enhancement layer, always in full).
 
 import type { VideoImproveRequest, VideoRuleEngineResult } from "./types.js"
 import { parseVideoPrompt } from "./parser.js"
-import { expandCameraMove, expandLighting, expandSetting, expandColorGrade, expandSubject, getCameraNumericSpec } from "./context-expander.js"
-import { NEGATIVE_LOCKS, CATEGORY_DEFAULTS } from "./dictionaries.js"
+import {
+  expandCameraMove, expandLighting, expandSetting, expandColorGrade, expandSubject,
+  getCameraNumericSpec, expandShotType, expandTimeOfDay, expandWeather, expandStyle,
+} from "./context-expander.js"
+import { NEGATIVE_LOCKS, CATEGORY_DEFAULTS, CINEMATOGRAPHY_MOOD_DEFAULT } from "./dictionaries.js"
 import { generateVideoLocks } from "./lock-generator.js"
-import { buildRefsSection, buildExcludeSection } from "./templates/narrative.js"
+import {
+  buildShotTypeSection, buildSubjectSection, buildActionSection, buildEnvironmentSection,
+  buildLightingGeometrySection, buildCameraMovementSection, buildTimeWeatherSection, buildStyleSection,
+  buildQualityTagSection, buildAudioSection, buildAspectRatioSection, buildDurationSection,
+  buildColorGradeRenderSection, buildMoodAtmosphereSection, buildPhysicsMotionSection,
+  buildVisualDetailSection, buildCinematographySection, buildRealismSection,
+  buildSceneConsistencySection, buildMotionQualitySection, buildStoryTellingSection,
+} from "./templates/narrative.js"
+import { buildProductRotation } from "./templates/product.js"
+import { buildNatureAtmosphere } from "./templates/nature.js"
+import { buildActionIntensity } from "./templates/action.js"
+import { buildAbstractTransform } from "./templates/abstract.js"
 import { formatForVideoPlatform } from "./formatter.js"
 import { scoreVideoPrompt } from "./validator.js"
 
@@ -43,29 +59,54 @@ export function improveVideoWithRules(req: VideoImproveRequest): VideoRuleEngine
   const cameraExp     = cameraSpec ? `${cameraExpBase}, ${cameraSpec}` : cameraExpBase
   const lightingExp   = expandLighting(parsed.lighting)     ?? expandLighting(defaults.lighting) ?? defaults.lighting
   const gradeExp      = expandColorGrade(parsed.colorGrade) ?? DEFAULTS.grade
+  const shotTypeExp   = expandShotType(parsed.shotType)     ?? expandShotType(defaults.shotType)   ?? defaults.shotType
+  const timeOfDayExp  = expandTimeOfDay(parsed.timeOfDay)   ?? expandTimeOfDay(defaults.timeOfDay) ?? defaults.timeOfDay
+  const weatherExp    = expandWeather(parsed.weather)       ?? expandWeather(defaults.weather)     ?? defaults.weather
+  const styleExp      = expandStyle(parsed.style)           ?? expandStyle(defaults.style)         ?? defaults.style
 
+  // ── Core structure (sections 1-15) ──────────────────────────────────────────
   const lines: string[] = [
-    `SUBJECT: ${subjectExp}`,
-    `ACTION: ${trimmedInput}`,
-    `SETTING: ${settingExp}`,
-    `CAMERA: ${cameraExp}`,
-    `LIGHTING: ${lightingExp}`,
-    `COLOR GRADE: ${gradeExp}`,
-    buildRefsSection("cinematic"),
+    buildShotTypeSection(shotTypeExp),
+    buildSubjectSection(subjectExp),
+    buildActionSection(trimmedInput, cat),
   ]
 
-  const negatives = NEGATIVE_LOCKS[cat] ?? NEGATIVE_LOCKS.narrative
-  lines.push(buildExcludeSection(negatives))
+  if (cat === "product")  lines.push(buildProductRotation())
+  if (cat === "nature")   lines.push(buildNatureAtmosphere())
+  if (cat === "action")   lines.push(buildActionIntensity())
+  if (cat === "abstract") lines.push(buildAbstractTransform())
 
+  lines.push(buildEnvironmentSection(settingExp))
+  lines.push(buildLightingGeometrySection(lightingExp))
+  lines.push(buildCameraMovementSection(cameraExp))
+  lines.push(buildTimeWeatherSection(timeOfDayExp, weatherExp))
+  lines.push(buildStyleSection(styleExp))
+  lines.push(buildQualityTagSection(cat))
+  lines.push(buildAudioSection(cat))
+  lines.push(buildAspectRatioSection(cat))
+  lines.push(buildDurationSection(cat))
+  lines.push(buildColorGradeRenderSection(gradeExp, cat))
+  lines.push(buildMoodAtmosphereSection(cat))
+
+  const negatives = NEGATIVE_LOCKS[cat] ?? NEGATIVE_LOCKS.narrative
   const locks = generateVideoLocks(cat, subjectAnchor, {
     action: trimmedInput,
     setting: parsed.setting,
     cameraMove: parsed.cameraMove,
   })
-  lines.push(locks.motion, locks.camera, locks.temporal, locks.continuity)
+
+  lines.push(buildPhysicsMotionSection(locks.motion))
+
+  // ── Advanced Enhancement layer (sections 16-21, always assembled) ──────────
+  lines.push(buildVisualDetailSection(cat))
+  lines.push(buildCinematographySection(CINEMATOGRAPHY_MOOD_DEFAULT[cat]))
+  lines.push(buildRealismSection(negatives))
+  lines.push(buildSceneConsistencySection(locks.continuity))
+  lines.push(buildMotionQualitySection(locks.camera, locks.temporal))
+  lines.push(buildStoryTellingSection(cat))
 
   const rawImproved = lines.join("\n\n")
-  const formatted = formatForVideoPlatform(rawImproved, req.platform, locks)
+  const formatted = formatForVideoPlatform(rawImproved, req.platform)
   const score = scoreVideoPrompt(rawImproved)
 
   return {
@@ -75,7 +116,8 @@ export function improveVideoWithRules(req: VideoImproveRequest): VideoRuleEngine
     score,
     components: {
       subject: true, action: true, setting: true,
-      cameraMove: true, lighting: true, colorGrade: true, locks: true,
+      cameraMove: true, lighting: true, colorGrade: true,
+      shotType: true, style: true, locks: true,
     },
     locks,
     negatives,

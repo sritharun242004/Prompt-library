@@ -69,6 +69,12 @@ function slug(name: string): string {
   return name.replace(/[^a-zA-Z0-9]+/g, "-").replace(/(^-|-$)/g, "").toLowerCase() || "page"
 }
 
+// Strips the "**LOCKS - X:** " label prefix so a lock sentence can be folded
+// into prose/bullets that don't use the Lovable-style bold-label convention.
+function stripLockLabel(lockText: string): string {
+  return lockText.replace(/^\*\*LOCKS - [A-Z &]+:\*\*\s*/, "")
+}
+
 // ─── Lovable ───────────────────────────────────────────────────────────────────
 // Full numbered spec document, React + Tailwind framing up top (Lovable
 // builds full React apps from a single conversational brief).
@@ -97,7 +103,7 @@ function toTitleCase(label: string): string {
 // Bolt.new scaffolds fast — a short imperative brief, a CSS-vars design-token
 // block, and a component-bullet list rather than a full prose document.
 
-function formatBolt(raw: string, palette: PaletteTokens): string {
+function formatBolt(raw: string, palette: PaletteTokens, locks: Locks): string {
   const overview = extractSection(raw, "APPLICATION OVERVIEW")
   const goalLine = overview.split("\n").find((l) => /^primary goal/i.test(l.trim())) ?? ""
   const features = extractFeatureLines(raw)
@@ -118,6 +124,11 @@ function formatBolt(raw: string, palette: PaletteTokens): string {
     goalLine || "Primary goal: convert the visitor into the site's core action.",
     ...constraints.slice(0, 2),
     "",
+    "Locks — hold constant on every page/component, no per-page drift:",
+    `- ${stripLockLabel(locks.typography)}`,
+    `- ${stripLockLabel(locks.spacing)}`,
+    `- ${stripLockLabel(locks.accessibility)}`,
+    "",
     "---",
   ]
   return lines.join("\n")
@@ -128,7 +139,7 @@ function formatBolt(raw: string, palette: PaletteTokens): string {
 // Router — frame as a route + component manifest with a Tailwind token
 // extension, not a prose document.
 
-function formatV0(raw: string, palette: PaletteTokens, categoryLabel: string): string {
+function formatV0(raw: string, palette: PaletteTokens, categoryLabel: string, locks: Locks): string {
   const role = extractSection(raw, "ROLE")
   const features = extractFeatureLines(raw)
   const voice = extractSection(raw, "BRAND VOICE & MOOD")
@@ -151,6 +162,12 @@ function formatV0(raw: string, palette: PaletteTokens, categoryLabel: string): s
     voice,
     "",
     "Use shadcn/ui primitives (Button, Card, Input, Dialog) wherever a native equivalent exists rather than hand-rolling components.",
+    "",
+    "Design invariants — every route must match these exactly, no per-page drift:",
+    `- ${stripLockLabel(locks.designSystem)}`,
+    `- ${stripLockLabel(locks.typography)}`,
+    `- ${stripLockLabel(locks.spacing)}`,
+    `- ${stripLockLabel(locks.accessibility)}`,
   ]
   return lines.join("\n")
 }
@@ -177,7 +194,10 @@ function formatCursor(raw: string, locks: Locks): string {
     "",
     "Acceptance criteria:",
     ...constraints.map((c) => `- ${c}`),
-    `- Design matches the DESIGN SPECIFICATIONS exactly: ${locks.designSystem.replace("**LOCKS - DESIGN SYSTEM:** ", "")}`,
+    `- Design matches the DESIGN SPECIFICATIONS exactly: ${stripLockLabel(locks.designSystem)}`,
+    `- ${stripLockLabel(locks.typography)}`,
+    `- ${stripLockLabel(locks.spacing)}`,
+    `- ${stripLockLabel(locks.accessibility)}`,
     "",
     "Definition of done: builds cleanly with no type errors, responsive at every breakpoint, and every page listed above exists and is reachable from navigation.",
   ]
@@ -188,7 +208,7 @@ function formatCursor(raw: string, locks: Locks): string {
 // Conversational, iterative build framing — matches how ChatGPT is actually
 // driven turn-by-turn against a canvas document.
 
-function formatChatGPT(raw: string, palette: PaletteTokens, categoryLabel: string): string {
+function formatChatGPT(raw: string, palette: PaletteTokens, categoryLabel: string, locks: Locks): string {
   const features = extractFeatureLines(raw)
   const voice = extractSection(raw, "BRAND VOICE & MOOD").split("\n")[0] ?? ""
 
@@ -202,6 +222,11 @@ function formatChatGPT(raw: string, palette: PaletteTokens, categoryLabel: strin
     ...features.map((f, i) => `${i + 1}. **${f.name}** - ${f.detail}`),
     "",
     "Show me each page as you build it before moving to the next one so I can course-correct early.",
+    "",
+    "**Keep these identical on every page — flag it back to me if a later page would need to break one:**",
+    `- ${stripLockLabel(locks.typography)}`,
+    `- ${stripLockLabel(locks.spacing)}`,
+    `- ${stripLockLabel(locks.accessibility)}`,
   ]
   return lines.join("\n")
 }
@@ -230,6 +255,8 @@ function formatClaude(raw: string, locks: Locks): string {
     "",
     locks.designSystem,
     locks.typography,
+    locks.spacing,
+    locks.accessibility,
   ]
   return lines.join("\n")
 }
@@ -257,6 +284,8 @@ function formatGemini(raw: string, palette: PaletteTokens, locks: Locks): string
     "**Motion layer:** " + interactions.join(" "),
     "",
     locks.designSystem,
+    locks.typography,
+    locks.spacing,
     locks.accessibility,
   ]
   return lines.join("\n")
@@ -266,7 +295,7 @@ function formatGemini(raw: string, palette: PaletteTokens, locks: Locks): string
 // Numbered file-by-file scaffold ending in explicit QA checks — matches how
 // Grok's coding-agent-style output is actually structured and verified.
 
-function formatGrok(raw: string, palette: PaletteTokens): string {
+function formatGrok(raw: string, palette: PaletteTokens, locks: Locks): string {
   const features = extractFeatureLines(raw)
   const constraints = extractSection(raw, "CONSTRAINTS & NON-GOALS").split("\n").filter(Boolean)
 
@@ -278,6 +307,7 @@ function formatGrok(raw: string, palette: PaletteTokens): string {
     `3. 'src/lib/data.ts' — mock content for every page`,
     ...features.map((f, i) => `${i + 4}. 'src/app/${slug(f.name)}/page.tsx' — ${f.name}: ${f.detail}`),
     `${features.length + 4}. QA: ${constraints[0] ?? "verify all constraints above"}; 'npx tsc --noEmit' → 0 errors`,
+    `${features.length + 5}. QA: every page holds these constant, no per-page drift — ${stripLockLabel(locks.typography)} ${stripLockLabel(locks.spacing)} ${stripLockLabel(locks.accessibility)}`,
   ]
   return lines.join("\n")
 }
@@ -291,13 +321,13 @@ export function formatForWebsitePlatform(
 ): string {
   switch (platform) {
     case "lovable": return formatLovable(raw, locks)
-    case "bolt":    return formatBolt(raw, palette)
-    case "v0":      return formatV0(raw, palette, categoryLabel)
+    case "bolt":    return formatBolt(raw, palette, locks)
+    case "v0":      return formatV0(raw, palette, categoryLabel, locks)
     case "cursor":  return formatCursor(raw, locks)
-    case "chatgpt": return formatChatGPT(raw, palette, categoryLabel)
+    case "chatgpt": return formatChatGPT(raw, palette, categoryLabel, locks)
     case "claude":  return formatClaude(raw, locks)
     case "gemini":  return formatGemini(raw, palette, locks)
-    case "grok":    return formatGrok(raw, palette)
+    case "grok":    return formatGrok(raw, palette, locks)
     default:        return raw
   }
 }

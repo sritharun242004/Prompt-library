@@ -1,9 +1,12 @@
 // ─── Video Rule Engine Types ───────────────────────────────────────────────────
-// Motion Formula v1.0 — zero-API deterministic video prompt construction.
-// Unlike the image engine (which locks static geometry/color), video prompting
-// fails on TEMPORAL consistency: identity drift, unnatural motion, morphing,
-// camera arcs that don't match the described action. Locks here pin motion and
-// continuity across the clip's duration, not a single frame's composition.
+// Motion Formula v2.0 — zero-API deterministic video prompt construction across
+// a fixed 15-section core structure (shot type through physics/motion dynamics)
+// plus a 6-section Advanced Enhancement layer (visual detail through story
+// telling) that's always assembled, never optional. Unlike the image engine
+// (which locks static geometry/color), video prompting fails on TEMPORAL
+// consistency: identity drift, unnatural motion, morphing, camera arcs that
+// don't match the described action — the enhancement layer's Scene Consistency
+// and Motion Quality sections exist specifically to pin that down.
 
 export type VideoCategory = "narrative" | "product" | "nature" | "action" | "abstract"
 
@@ -18,6 +21,13 @@ export interface VideoBuildRequest {
   lighting?: string
   colorGrade?: string
   mood?: string
+  // Optional overrides for the new v2.0 sections — every one of these falls
+  // back to a category-tuned default (see CATEGORY_DEFAULTS) when omitted, so
+  // no caller is required to supply them.
+  shotType?: string
+  timeOfDay?: string
+  weather?: string
+  style?: string
   extraNotes?: string
   platform: VideoPlatformKey
 }
@@ -36,6 +46,10 @@ export interface ParsedVideoPrompt {
   cameraMove: string | null
   lighting: string | null
   colorGrade: string | null
+  shotType: string | null
+  timeOfDay: string | null
+  weather: string | null
+  style: string | null
   missingComponents: string[]
   originalWords: string[]
 }
@@ -63,6 +77,8 @@ export interface VideoRuleEngineResult {
     cameraMove: boolean
     lighting: boolean
     colorGrade: boolean
+    shotType: boolean
+    style: boolean
     locks: boolean
   }
   locks: {

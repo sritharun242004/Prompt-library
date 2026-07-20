@@ -27,6 +27,13 @@ export function buildRoleSection(category: WebsiteCategory, subcategory: string)
   return `ROLE: You are ${expandRoleFraming(category, subcategory)}.`
 }
 
+// "E-Commerce" and "Apps & SaaS Interface" both start on a vowel sound, so a
+// hardcoded "a" produces "a e-commerce" / "a apps & saas interface" — pick
+// the article from the label's own first letter instead of assuming "a".
+function articleFor(label: string): "a" | "an" {
+  return "aeiou".includes(label.trim().charAt(0).toLowerCase()) ? "an" : "a"
+}
+
 export function buildOverviewSection(category: WebsiteCategory, categoryLabel: string, subcategory: string, pages: string[], idea?: string): string {
   const features = getSubcategoryFeatures(subcategory)
   const pageNames = pages.length ? pages.join(", ") : features.map((f) => f.split(" - ")[0].trim()).join(", ")
@@ -39,7 +46,7 @@ export function buildOverviewSection(category: WebsiteCategory, categoryLabel: s
   const description = idea?.trim() ? idea.trim() : `a ${subcategory.toLowerCase()} concept`
   return [
     "APPLICATION OVERVIEW:",
-    `This is a ${categoryLabel.toLowerCase()} for ${description}.`,
+    `This is ${articleFor(categoryLabel)} ${categoryLabel.toLowerCase()} for ${description}.`,
     `Core website areas: ${pageNames}.`,
     `Primary goal: ${primaryGoal}. Secondary goal: ${secondaryGoal}.`,
   ].join("\n")

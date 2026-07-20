@@ -15,6 +15,10 @@ const CAMERA_MOVE_KEYWORDS = ["dolly in", "dolly out", "truck left", "truck righ
 const LIGHTING_KEYWORDS = ["golden hour", "blue hour", "overcast", "harsh midday", "neon night", "practical interior", "moonlight", "storm light", "firelight", "studio soft"]
 const COLOR_GRADE_KEYWORDS = ["teal orange", "kodak print", "bleach bypass", "cool blue", "warm sepia", "high contrast noir", "pastel dreamlike", "natural neutral"]
 const SETTING_KEYWORDS = ["urban street", "forest", "ocean", "desert", "interior office", "mountain", "space", "underwater"]
+const SHOT_TYPE_KEYWORDS = ["extreme close-up", "close-up", "medium shot", "establishing shot", "wide shot", "over-the-shoulder", "pov", "macro", "aerial", "low angle", "high angle", "dutch angle"]
+const TIME_OF_DAY_KEYWORDS = ["dawn", "morning", "golden hour", "midday", "afternoon", "dusk", "night"]
+const WEATHER_KEYWORDS = ["heavy rain", "light rain", "overcast", "fog", "snow", "windy", "storm", "clear"]
+const STYLE_KEYWORDS = ["photorealistic cinematic", "hyperrealistic commercial", "photorealistic documentary", "photorealistic gritty", "stylized generative", "stylized anime", "retro film", "cyberpunk neon"]
 
 function detectCategory(text: string): VideoCategory {
   const lower = text.toLowerCase()
@@ -59,6 +63,10 @@ export function parseVideoPrompt(raw: string): ParsedVideoPrompt {
     cameraMove: findFirstMatch(raw, CAMERA_MOVE_KEYWORDS),
     lighting:   findFirstMatch(raw, LIGHTING_KEYWORDS),
     colorGrade: findFirstMatch(raw, COLOR_GRADE_KEYWORDS),
+    shotType:   findFirstMatch(raw, SHOT_TYPE_KEYWORDS),
+    timeOfDay:  findFirstMatch(raw, TIME_OF_DAY_KEYWORDS),
+    weather:    findFirstMatch(raw, WEATHER_KEYWORDS),
+    style:      findFirstMatch(raw, STYLE_KEYWORDS),
     missingComponents: [],
     originalWords: words,
   }

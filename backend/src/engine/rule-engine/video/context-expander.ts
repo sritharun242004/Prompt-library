@@ -2,7 +2,7 @@
 // Expands short terms to rich cinematographic descriptions via dictionary lookup.
 // No AI — pure table-driven substitution.
 
-import { CAMERA_MOVE, LIGHTING_ATMOSPHERE, ACTION, ENVIRONMENT, COLOR_GRADE, SUBJECT, CAMERA_MOVE_NUMERICS, PLATFORM_FPS } from "./dictionaries.js"
+import { CAMERA_MOVE, LIGHTING_ATMOSPHERE, ACTION, ENVIRONMENT, COLOR_GRADE, SUBJECT, CAMERA_MOVE_NUMERICS, PLATFORM_FPS, SHOT_TYPE, TIME_OF_DAY, WEATHER, STYLE } from "./dictionaries.js"
 
 function lookup(dict: Record<string, string>, term: string | null): string | null {
   if (!term) return null
@@ -58,4 +58,20 @@ export function expandSetting(term: string | null): string | null {
 
 export function expandColorGrade(term: string | null): string | null {
   return lookup(COLOR_GRADE, term)
+}
+
+export function expandShotType(term: string | null): string | null {
+  return lookup(SHOT_TYPE, term)
+}
+
+export function expandTimeOfDay(term: string | null): string | null {
+  return lookup(TIME_OF_DAY, term)
+}
+
+export function expandWeather(term: string | null): string | null {
+  return lookup(WEATHER, term)
+}
+
+export function expandStyle(term: string | null): string | null {
+  return lookup(STYLE, term)
 }

@@ -1,5 +1,7 @@
-// ─── Motion Formula v1.0 — Dictionaries ────────────────────────────────────────
+// ─── Motion Formula v2.0 — Dictionaries ────────────────────────────────────────
 // Term → rich cinematographic description. No API calls — pure lookup.
+
+import type { VideoCategory } from "./types.js"
 
 export const CAMERA_MOVE: Record<string, string> = {
   "dolly in":       "slow dolly-in on a smooth track, steady constant speed, tightening from establishing to medium framing over the full clip",
@@ -136,12 +138,179 @@ export const PLATFORM_FPS: Record<string, number> = {
 export const CATEGORY_DEFAULTS: Record<string, {
   motionSpeed: string; motionDirection: string; duration: string;
   cameraMove: string; lighting: string;
+  shotType: string; timeOfDay: string; weather: string; style: string;
 }> = {
-  narrative: { motionSpeed: "natural human pace", motionDirection: "left to right",  duration: "5-10s", cameraMove: "steadicam", lighting: "practical interior" },
-  product:   { motionSpeed: "slow and deliberate",  motionDirection: "clockwise",     duration: "4-6s",  cameraMove: "orbit",     lighting: "studio soft" },
-  nature:    { motionSpeed: "slow ambient drift",   motionDirection: "steady",        duration: "6-12s", cameraMove: "pan",       lighting: "golden hour" },
-  action:    { motionSpeed: "fast dynamic",         motionDirection: "forward",       duration: "3-6s",  cameraMove: "handheld",  lighting: "harsh midday" },
-  abstract:  { motionSpeed: "fluid continuous",     motionDirection: "expanding",     duration: "4-8s",  cameraMove: "static",    lighting: "studio soft" },
+  narrative: { motionSpeed: "natural human pace", motionDirection: "left to right",  duration: "5-10s", cameraMove: "steadicam", lighting: "practical interior",
+    shotType: "medium shot", timeOfDay: "dusk", weather: "clear", style: "photorealistic cinematic" },
+  product:   { motionSpeed: "slow and deliberate",  motionDirection: "clockwise",     duration: "4-6s",  cameraMove: "orbit",     lighting: "studio soft",
+    shotType: "close-up", timeOfDay: "n/a", weather: "n/a", style: "hyperrealistic commercial" },
+  nature:    { motionSpeed: "slow ambient drift",   motionDirection: "steady",        duration: "6-12s", cameraMove: "pan",       lighting: "golden hour",
+    shotType: "establishing shot", timeOfDay: "golden hour", weather: "clear", style: "photorealistic documentary" },
+  action:    { motionSpeed: "fast dynamic",         motionDirection: "forward",       duration: "3-6s",  cameraMove: "handheld",  lighting: "harsh midday",
+    shotType: "wide shot", timeOfDay: "midday", weather: "clear", style: "photorealistic gritty" },
+  abstract:  { motionSpeed: "fluid continuous",     motionDirection: "expanding",     duration: "4-8s",  cameraMove: "static",    lighting: "studio soft",
+    shotType: "macro", timeOfDay: "n/a", weather: "n/a", style: "stylized generative" },
+}
+
+// ─── Motion Formula v2.0 — new section dictionaries ──────────────────────────
+// SHOT TYPE (section 1) — framing/scale, independent of camera movement (which
+// describes how the camera travels, not how tightly it's framed).
+
+export const SHOT_TYPE: Record<string, string> = {
+  "close-up":          "intimate close-up framing, subject fills most of the frame, fine surface/facial detail clearly resolved",
+  "extreme close-up":  "extreme close-up framing isolating a single feature or detail, texture and surface micro-detail dominate the frame",
+  "medium shot":       "medium framing from roughly the waist up, balancing subject presence with immediate surroundings",
+  "wide shot":         "wide framing, subject occupies a modest portion of the frame with the environment clearly legible around them",
+  "establishing shot": "wide establishing framing that sets geographic and spatial context before any subsequent narrowing to the subject",
+  "over-the-shoulder": "over-the-shoulder framing, a foreground shoulder/frame edge with the subject visible beyond it",
+  "pov":               "first-person point-of-view framing, the camera itself represents the subject's own eyeline",
+  "macro":             "macro framing at extreme magnification on fine surface or material detail, shallow depth of field",
+  "aerial":            "elevated aerial framing looking down across the scene from height",
+  "low angle":         "low-angle framing, camera positioned below eye level looking up so the subject reads as dominant",
+  "high angle":        "high-angle framing, camera positioned above eye level looking down so the subject reads as small or vulnerable",
+  "dutch angle":       "deliberately tilted dutch-angle framing, horizon line off-level for tension or disorientation",
+}
+
+// TIME & WEATHER (section 7) — narrative time-of-day and atmospheric weather
+// condition. Product/abstract categories default to "n/a" (controlled studio
+// or void environment) rather than an invented time/weather that would
+// contradict the studio lighting already specified for those categories.
+
+export const TIME_OF_DAY: Record<string, string> = {
+  "dawn":        "dawn, low warm light just breaking the horizon, long cool shadows still present",
+  "morning":     "morning, bright clear light with a gentle warm cast, shadows still moderately long",
+  "midday":      "midday, high overhead sun, shortest shadows of the day",
+  "afternoon":   "afternoon, light beginning to warm and lengthen shadows",
+  "golden hour": "golden hour, low warm sun angle, long soft shadows across the scene",
+  "dusk":        "dusk, fading warm light giving way to cool ambient twilight",
+  "night":       "night, artificial or moon-driven light sources only, deep ambient shadow",
+  "n/a":         "not applicable — controlled studio/void environment with no natural time-of-day cycle",
+}
+
+export const WEATHER: Record<string, string> = {
+  "clear":       "clear conditions, unobstructed light and visibility",
+  "overcast":    "overcast sky, soft even diffusion, no hard shadows",
+  "light rain":  "light rain, wet reflective surfaces, fine visible droplets in the air",
+  "heavy rain":  "heavy rain, streaking droplets, reduced visibility, saturated wet surfaces",
+  "fog":         "fog/mist, reduced visibility and softened contrast with distance",
+  "snow":        "falling or settled snow, muted cool palette, softened ambient light",
+  "windy":       "visibly windy, foliage/hair/fabric in constant responsive motion",
+  "storm":       "storm conditions, dramatic sky, occasional lightning highlight, desaturated cool tones",
+  "n/a":         "not applicable — controlled studio/void environment with no natural weather variance",
+}
+
+// STYLE (section 8) — overall visual/artistic treatment.
+
+export const STYLE: Record<string, string> = {
+  "photorealistic cinematic":     "photorealistic cinematic treatment, naturalistic light response, film-grade color science",
+  "hyperrealistic commercial":    "hyperrealistic commercial treatment, glossy controlled finish, retouched-grade surface fidelity",
+  "photorealistic documentary":   "photorealistic documentary treatment, naturalistic and unforced, no artificial polish",
+  "photorealistic gritty":        "photorealistic gritty treatment, higher grain and contrast, unpolished energy",
+  "stylized generative":          "stylized non-representational generative-motion treatment, emphasis on form, color and transformation over photographic realism",
+  "stylized anime":               "stylized anime/illustrative treatment, cel-shaded or painterly rendering rather than photoreal",
+  "retro film":                   "retro film-emulation treatment, period-accurate grain, halation and color response",
+  "cyberpunk neon":               "cyberpunk neon treatment, saturated mixed practical light sources, high-contrast urban night palette",
+}
+
+// MICRO-ACTION (folds into section 3, ACTION & MICRO-ACTION) — the subtle
+// secondary motion that keeps a clip from reading as a static pose holding
+// still between the primary beats of the described action.
+
+export const MICRO_ACTION_BY_CATEGORY: Record<VideoCategory, string> = {
+  narrative: "natural secondary motion runs underneath the primary action throughout — subtle breathing, fabric sway, and minor weight shifts, never a held static pose",
+  product:   "faint reflective micro-shifts move across the product's surface as it catches changing light through the move, keeping the reveal from reading as a static render",
+  nature:    "fine-grained secondary motion continues in the environment throughout — leaf flutter, water ripple, or grass sway consistent with the stated wind/water conditions",
+  action:    "continuous secondary motion — muscle tension, fabric strain, dust or debris kicked up by the primary action — runs alongside the main movement without ever pausing into a held pose",
+  abstract:  "continuous micro-variation plays across the surface/edge detail throughout the transformation, so the form never reads as a static loop between beats",
+}
+
+// QUALITY TAG (section 9) — baseline fidelity bar, phrased to also exclude
+// the AI-generation artifacts that most commonly break a video model's output.
+
+export const QUALITY_TAG_BY_CATEGORY: Record<VideoCategory, string> = {
+  narrative: "photorealistic detail retained through motion, no compression artifacts, no AI-generation artifacts (no extra/fused fingers, no warped text, no waxy plastic-skin look)",
+  product:   "commercial-grade retouched finish, sharp surface fidelity held through the full rotation, no compression artifacts, no AI-generation artifacts (no logo warping, no melted geometry)",
+  nature:    "photographic-grade natural detail, no compression artifacts, no AI-generation artifacts (no impossible terrain, no duplicated/tiled foliage or water)",
+  action:    "detail retained through fast motion without frying into noise, no compression artifacts, no AI-generation artifacts (no fused/extra limbs, no impossible joint bends)",
+  abstract:  "clean high-fidelity gradients with no banding or blocky compression, no AI-generation artifacts (no flicker, no texture popping between frames)",
+}
+
+// AUDIO (section 10) — sound-design intent. Named explicitly so a platform
+// that supports native audio generation (rather than silent video) has a
+// clear, deliberate instruction instead of an unconstrained default.
+
+export const AUDIO_BY_CATEGORY: Record<VideoCategory, string> = {
+  narrative: "ambient environmental sound matched to the setting; dialogue only if explicitly requested, otherwise no dialogue; no anachronistic or mismatched sound cues",
+  product:   "clean near-silent studio ambience with subtle mechanical/material foley on contact moments only; no music unless explicitly requested",
+  nature:    "natural ambient soundscape matched to the environment (wind, water, wildlife) at a level that never overpowers the visual; no artificial music sting unless requested",
+  action:    "high-impact foley synced precisely to each hit/impact frame, ambient environmental bed underneath; no audio drift or delay relative to the visual action",
+  abstract:  "ambient/tonal soundscape or silence, abstractly matched to the transformation's rhythm; no literal diegetic sound since the subject is non-representational",
+}
+
+// ASPECT RATIO (section 11) — category-appropriate default framing shape.
+
+export const ASPECT_RATIO_BY_CATEGORY: Record<VideoCategory, string> = {
+  narrative: "16:9 widescreen cinematic",
+  product:   "1:1 square or 4:5 vertical, sized for commerce/social placements",
+  nature:    "16:9 widescreen cinematic",
+  action:    "16:9 widescreen cinematic",
+  abstract:  "16:9 or 1:1 — the motion composition stays centered and reads cleanly in either",
+}
+
+// RENDER ENGINE (folds into section 13, COLOR GRADE & RENDER ENGINE) — the
+// rendering-fidelity companion to the color grade itself.
+
+export const RENDER_ENGINE_BY_CATEGORY: Record<VideoCategory, string> = {
+  narrative: "photoreal cinema-camera rendering, physically based lighting response, no render-engine artifacts",
+  product:   "physically based rendering with accurate specular/reflection response, commercial-grade render fidelity",
+  nature:    "photoreal natural-light rendering, no render-engine artifacts on foliage/water surfaces",
+  action:    "photoreal cinema-camera rendering that holds up under fast motion, no render-engine artifacts",
+  abstract:  "high-fidelity physically based rendering with clean gradients, no banding or dithering artifacts",
+}
+
+// Default CINEMATOGRAPHY reference style per category, used when the caller
+// doesn't supply an explicit `mood` — a product reveal calls for clean
+// commercial camera work, not the same film-director references (Deakins,
+// Lubezki) that suit a narrative scene.
+export const CINEMATOGRAPHY_MOOD_DEFAULT: Record<VideoCategory, string> = {
+  narrative: "cinematic",
+  product:   "commercial",
+  nature:    "cinematic",
+  action:    "cinematic",
+  abstract:  "dreamlike",
+}
+
+// MOOD & EMOTIONAL ATMOSPHERE (section 14) — distinct from the `mood` request
+// field, which instead selects the CINEMATOGRAPHY reference style below.
+
+export const MOOD_ATMOSPHERE_BY_CATEGORY: Record<VideoCategory, string> = {
+  narrative: "intimate, emotionally grounded, quietly confident",
+  product:   "aspirational, premium, desirable",
+  nature:    "serene, awe-inspiring, vast",
+  action:    "adrenaline-charged, urgent, kinetic",
+  abstract:  "hypnotic, meditative, mesmerizing",
+}
+
+// VISUAL DETAIL (Advanced Enhancement #1) — fine surface/material/texture
+// fidelity expectations, called out explicitly rather than left implicit.
+
+export const VISUAL_DETAIL_BY_CATEGORY: Record<VideoCategory, string> = {
+  narrative: "skin texture and pores, fabric weave and drape, and environmental micro-detail (dust motes, condensation) all render with photographic fidelity",
+  product:   "micro-surface detail — brushed-metal grain, glass clarity and refraction, stitching/seam precision — renders without plasticky over-smoothing",
+  nature:    "individual leaf, water, fur or feather detail stays resolved at full clip resolution, with no texture smearing during motion",
+  action:    "motion-appropriate detail retention — sweat, dust kickup, fabric strain — stays visible without frying into noise at speed",
+  abstract:  "fine gradient and particle-level detail in the transforming form, with no banding or blocky compression through the color transitions",
+}
+
+// STORY TELLING (Advanced Enhancement #6) — the clip reads as one complete
+// beat with an implied before/after, not an arbitrary slice of time.
+
+export const STORY_TELLING_BY_CATEGORY: Record<VideoCategory, string> = {
+  narrative: "the clip reads as one complete emotional beat — an implied state before the action, the action itself as the turning point, and an implied resolved state after, not an arbitrary slice of time",
+  product:   "a reveal arc: anticipation in the opening framing, the hero reveal at the rotation's key-light beat, and a resolved desirability beat in the final framing",
+  nature:    "a single observed moment of a natural process (light shifting, water moving, wind through canopy) that reads as a complete, self-contained vignette",
+  action:    "one complete beat of momentum — wind-up, peak effort or impact, and follow-through — fully resolved within the clip rather than cut off mid-motion",
+  abstract:  "a complete transformation arc — initial form, the transformation itself, and the resolved final form — read as one continuous idea rather than a random loop",
 }
 
 // ─── Negative locks (anti-artifact) per category ─────────────────────────────

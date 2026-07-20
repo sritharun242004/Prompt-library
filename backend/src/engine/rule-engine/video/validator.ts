@@ -3,23 +3,32 @@
 // No AI — deterministic rule-based scoring.
 
 const SECTION_WEIGHTS: Record<string, number> = {
-  SUBJECT:       20,
-  ACTION:        15,
-  SETTING:       10,
-  CAMERA:        15,
-  LIGHTING:      10,
-  "COLOR GRADE":  5,
-  EXCLUDE:        5,
-  "LOCKS - MOTION":     6,
-  "LOCKS - CAMERA":     6,
-  "LOCKS - TEMPORAL":   4,
-  "LOCKS - CONTINUITY": 4,
+  SUBJECT:                        14,
+  "SHOT TYPE":                     6,
+  "ACTION & MICRO-ACTION":        10,
+  ENVIRONMENT:                     8,
+  "LIGHTING GEOMETRY":             6,
+  "CAMERA MOVEMENT":              10,
+  "TIME & WEATHER":                4,
+  STYLE:                           4,
+  "QUALITY TAG":                   3,
+  AUDIO:                           3,
+  "ASPECT RATIO":                  2,
+  DURATION:                        2,
+  "COLOR GRADE & RENDER ENGINE":   4,
+  "MOOD & EMOTIONAL ATMOSPHERE":   3,
+  "PHYSICS & MOTION DYNAMICS":     6,
+  "VISUAL DETAIL":                 4,
+  CINEMATOGRAPHY:                  3,
+  REALISM:                         4,
+  "SCENE CONSISTENCY":             5,
+  "MOTION QUALITY":                5,
+  "STORY TELLING":                 4,
 }
 
 function detectSection(prompt: string, section: string): boolean {
   const lower = prompt.toLowerCase()
   const sec = section.toLowerCase()
-  if (sec.startsWith("locks")) return lower.includes(`**${sec}`)
   return lower.includes(`${sec}:`) || lower.includes(`${sec} `) || lower.includes(`${sec}\n`)
 }
 
