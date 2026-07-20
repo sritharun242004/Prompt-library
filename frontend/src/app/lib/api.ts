@@ -1,4 +1,10 @@
-const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "http://localhost:3000";
+const envApiUrl = (import.meta as any).env?.VITE_API_URL as string | undefined;
+if ((import.meta as any).env?.PROD && !envApiUrl) {
+  // A build without VITE_API_URL set has actually shipped talking to
+  // localhost in production — this is loud on purpose.
+  console.error("[api] VITE_API_URL is not set for this production build — every API call will target localhost and fail. Set VITE_API_URL in the deployment environment and rebuild.");
+}
+const API_BASE = envApiUrl ?? "http://localhost:3000";
 
 // ─── Token helpers ────────────────────────────────────────────────────────────
 
@@ -8,17 +14,31 @@ export const token = {
   clear: () => localStorage.removeItem("pv_token"),
 };
 
+export const AUTH_CHANGED_EVENT = "pv-auth-changed";
+
 export const authStore = {
-  getUser: () => {
+  getUser: (): AuthUser | null => {
     try {
       const raw = localStorage.getItem("pv_user");
-      return raw ? (JSON.parse(raw) as AuthUser) : null;
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || typeof parsed.id !== "string" || typeof parsed.email !== "string") {
+        return null;
+      }
+      return parsed as AuthUser;
     } catch {
       return null;
     }
   },
-  setUser: (u: AuthUser) => localStorage.setItem("pv_user", JSON.stringify(u)),
-  clear: () => { token.clear(); localStorage.removeItem("pv_user"); },
+  setUser: (u: AuthUser) => {
+    localStorage.setItem("pv_user", JSON.stringify(u));
+    window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
+  },
+  clear: () => {
+    token.clear();
+    localStorage.removeItem("pv_user");
+    window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
+  },
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -62,18 +82,36 @@ export interface Submission {
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const t = token.get();
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(t ? { Authorization: `Bearer ${t}` } : {}),
-      ...(options?.headers ?? {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(t ? { Authorization: `Bearer ${t}` } : {}),
+        ...(options?.headers ?? {}),
+      },
+    });
+  } catch {
+    // fetch() itself throws on network failure (offline, DNS, CORS-blocked) —
+    // normalize to the same Error shape as an HTTP-level failure instead of
+    // letting a raw TypeError escape.
+    throw new Error("Network error — check your connection and try again.");
+  }
+
+  if (res.status === 401 && t) {
+    // Only a previously-authenticated request that got rejected counts as a
+    // stale/expired session — clear it so the UI stops rendering "signed in"
+    // against a token the server no longer accepts.
+    authStore.clear();
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Request failed" }));
     throw new Error((err as any).error ?? "Request failed");
   }
+
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
@@ -202,6 +240,12 @@ export const libraryApi = {
 
   save: (id: number | string) =>
     apiFetch<{ saved: boolean }>(`/api/library/prompts/${id}/save`, { method: "POST" }),
+
+  // IDs of prompts the current user has already saved — fetch once and use
+  // to hydrate each card's initial saved state instead of always starting
+  // from false (which previously meant re-clicking "Save" on an
+  // already-saved prompt would silently un-save it).
+  savedIds: () => apiFetch<{ ids: number[] }>("/api/library/saved"),
 };
 
 // ─── Engine lock layer (shared by Builder + Improver) ────────────────────────
@@ -244,7 +288,13 @@ export interface EngineLockFields {
   // Full canonical output: descriptive prompt + LOCK LAYER + NEGATIVE LOCKS.
   // Falls back to the plain prompt for non-image families.
   finalAssembledText: string;
+  // "JSON Prompting" — the same lock fields restructured as a JSON object
+  // instead of prose. Only populated when promptFormat: "json" was requested
+  // (image family only); null otherwise.
+  jsonPrompt?: Record<string, unknown> | null;
 }
+
+export type PromptFormat = "text" | "json";
 
 // ─── Builder ─────────────────────────────────────────────────────────────────
 
@@ -272,6 +322,10 @@ export const builderApi = {
     cameraMovement?: string;
     pacing?: string;
     soundDesign?: string;
+    lighting?: string;
+    cameraAngle?: string;
+    setting?: string;
+    promptFormat?: PromptFormat;
   }) =>
     apiFetch<BuilderResult>("/api/builder/generate", {
       method: "POST",
@@ -295,8 +349,33 @@ export interface ImproverResult extends EngineLockFields {
 }
 
 export const improverApi = {
-  improve: (payload: { prompt: string; platform: string; family?: string }) =>
+  improve: (payload: { prompt: string; platform: string; family?: string; category?: string; promptFormat?: PromptFormat }) =>
     apiFetch<ImproverResult>("/api/improver/improve", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+};
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+
+export interface BulkImportColumnMap {
+  title: string;
+  family: string;
+  basePrompt: string;
+  categoryId?: string;
+  qualityScore?: string;
+}
+
+export interface BulkImportResult {
+  importId: string;
+  imported: number;
+  errors: { row: number; error: string }[];
+  truncated: boolean;
+}
+
+export const adminApi = {
+  bulkImport: (payload: { filename: string; columnMap: BulkImportColumnMap; rows: Record<string, string>[] }) =>
+    apiFetch<BulkImportResult>("/api/admin/import/start", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
@@ -314,6 +393,31 @@ export interface ExpandResult extends EngineLockFields {
 export const variablesApi = {
   expand: (payload: { category: string; platform: string; brief: Record<string, string>; title?: string }) =>
     apiFetch<ExpandResult>("/api/variables/expand", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+};
+
+// ─── Refine — chat-driven revision of a generated/improved prompt ────────────
+
+export interface RefineTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface RefineResult {
+  revised: string;
+  categoryId: string | null;
+  categoryLabel: string | null;
+  lockSection: LockSectionItem[];
+  negativeLocks: string[];
+  tokensUsed: number;
+  jsonPrompt?: Record<string, unknown> | null;
+}
+
+export const refineApi = {
+  refine: (payload: { family: string; platform: string; category?: string; history: RefineTurn[]; promptFormat?: PromptFormat }) =>
+    apiFetch<RefineResult>("/api/refine", {
       method: "POST",
       body: JSON.stringify(payload),
     }),

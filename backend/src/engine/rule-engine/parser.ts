@@ -2,6 +2,7 @@
 // Keyword extraction from raw user input — no AI, no API.
 
 import type { ParsedPrompt, RuleEngineCategory } from "./types"
+import { findFirstMatch, detectCategoryByScore } from "./keyword-utils"
 
 // ─── Category detection keywords ─────────────────────────────────────────────
 
@@ -25,30 +26,13 @@ const SETTING_KEYWORDS  = ["office", "studio", "street", "outdoor", "indoor", "n
 const WARDROBE_KEYWORDS = ["suit", "business casual", "casual", "hoodie", "formal", "streetwear", "traditional", "athletic", "smart casual", "jeans", "dress"]
 
 // ─── Category detection ───────────────────────────────────────────────────────
+// Falls back to "product" (not "people") when nothing matches or scores tie —
+// its required fields (subject/lighting/camera) carry no wardrobe/skin
+// assumptions, so it degrades gracefully for subjects outside the five known
+// categories (animals, landscapes, vehicles, food, etc).
 
 function detectCategory(text: string): RuleEngineCategory {
-  const lower = text.toLowerCase()
-  const scores: Record<RuleEngineCategory, number> = {
-    people: 0, fashion: 0, product: 0, art: 0, social: 0,
-  }
-  for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    for (const kw of keywords) {
-      if (lower.includes(kw)) scores[cat as RuleEngineCategory]++
-    }
-  }
-  const sorted = (Object.entries(scores) as [RuleEngineCategory, number][])
-    .sort((a, b) => b[1] - a[1])
-  return sorted[0][1] > 0 ? sorted[0][0] : "people"
-}
-
-// ─── Generic keyword finder ───────────────────────────────────────────────────
-
-function findFirstMatch(text: string, keywords: string[]): string | null {
-  const lower = text.toLowerCase()
-  for (const kw of keywords) {
-    if (lower.includes(kw)) return kw
-  }
-  return null
+  return detectCategoryByScore(text, CATEGORY_KEYWORDS, "product")
 }
 
 // ─── Hand position normaliser ─────────────────────────────────────────────────

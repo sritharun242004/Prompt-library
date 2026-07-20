@@ -16,6 +16,7 @@ import { videoLibraryPrompts } from "../../lib/video-data";
 import { videoPlatformVersions } from "../../lib/video-platforms";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { PromptCard } from "../PromptCard";
+import { useSavedIds, invalidateSavedIds } from "../../lib/savedIds";
 
 const SAMPLE_REVIEWS = [
   { name: "Arjun S.",   initials: "AS", color: "#0a0a0a", stars: 5, helpful: 34, body: "Produced exactly what I needed - sharp, editorial output on the first try. Saved me 20 minutes of prompt tweaking." },
@@ -64,8 +65,16 @@ export function Detail({ id, go, defaultPlatform }: { id: string; go: (p: string
   const isVideoPrompt = staticPrompt?.family === "video";
   const [platform, setPlatform] = useState(defaultPlatform ?? (isVideoPrompt ? "veo" : "chatgpt"));
   const [vars, setVars]         = useState<Record<string, string>>({});
+  const savedIds = useSavedIds();
   const [saved, setSaved]       = useState(false);
   const [saving, setSaving]     = useState(false);
+  const [vote, setVote]         = useState<"up" | "down" | null>(null);
+  const castVote = (dir: "up" | "down") => {
+    setVote(v => (v === dir ? null : dir));
+    if (vote !== dir) toast.success(dir === "up" ? "Thanks for the feedback!" : "Thanks — we'll take a look.");
+  };
+  const [markedHelpful, setMarkedHelpful] = useState<Record<number, boolean>>({});
+  const toggleHelpful = (i: number) => setMarkedHelpful(prev => ({ ...prev, [i]: !prev[i] }));
 
   // For static prompts: load platform versions from correct source
   useEffect(() => {
@@ -95,6 +104,8 @@ export function Detail({ id, go, defaultPlatform }: { id: string; go: (p: string
 
   const p = prompt;
 
+  useEffect(() => { if (p) setSaved(savedIds.has(Number(p.id))); }, [savedIds, p?.id]);
+
   // Merge lazily-loaded platform data into the prompt's platforms map
   const resolvedPlatforms: Record<string, string> = {
     ...(p?.platforms ?? {}),
@@ -120,16 +131,21 @@ export function Detail({ id, go, defaultPlatform }: { id: string; go: (p: string
 
   async function handleRegenerate() {
     if (!p || regenerating) return;
+    const requestedPlatform = platform;
     setRegenerating(true);
     try {
       const res = await variablesApi.expand({
         category: p.category ?? "",
-        platform,
+        platform: requestedPlatform,
         brief: vars,
         title: p.title,
       });
-      setRegenText(res.finalAssembledText);
-      toast.success("Regenerated with your values");
+      // The user may have switched platform tabs while this was in flight —
+      // a stale response for the old tab must not override the new tab's text.
+      if (requestedPlatform === platform) {
+        setRegenText(res.finalAssembledText);
+        toast.success("Regenerated with your values");
+      }
     } catch (e: any) {
       toast.error("Regeneration failed", { description: e?.message });
     } finally {
@@ -182,8 +198,11 @@ export function Detail({ id, go, defaultPlatform }: { id: string; go: (p: string
 
   if (fetchState === "error" || !p) {
     return (
-      <div className="max-w-[1400px] mx-auto px-6 py-16 text-center">
-        <p className="text-[#6b7280] mb-4">Prompt not found.</p>
+      <div className="max-w-[1400px] mx-auto px-6 py-24 flex flex-col items-center justify-center gap-4 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-[#0a0a0a]/10 flex items-center justify-center">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="1.5" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        </div>
+        <p className="text-[#6b7280]">Prompt not found.</p>
         <button onClick={() => go("library")} className="inline-flex items-center gap-1.5 text-[#0a0a0a] hover:text-[#0a0a0a]/80 text-[13px] transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Library
         </button>
@@ -199,13 +218,20 @@ export function Detail({ id, go, defaultPlatform }: { id: string; go: (p: string
 
   const activePlatformKey =
     availablePlatforms.includes(platform) ? platform : (availablePlatforms[0] ?? "chatgpt");
+  const activePlatformName = (isVideoPrompt ? videoPlatforms : platforms).find(pl => pl.key === activePlatformKey)?.name;
+
+  const relatedPrompts = (isVideoPrompt ? videoLibraryPrompts : imageLibraryPrompts)
+    .filter(x => x.category === p.category && x.id !== p.id)
+    .slice(0, 4);
 
   const handleSave = async () => {
     if (!authStore.getUser()) { toast.error("Sign in to save prompts"); return; }
+    if (saving) return;
     setSaving(true);
     try {
       const res = await libraryApi.save(p.id);
       setSaved(res.saved);
+      invalidateSavedIds();
       toast(res.saved ? "Saved to library" : "Removed from library", { description: p.title });
     } catch { toast.error("Could not save - is the backend running?"); }
     finally { setSaving(false); }
@@ -259,7 +285,13 @@ export function Detail({ id, go, defaultPlatform }: { id: string; go: (p: string
           {(p.tags ?? []).length > 0 && (
             <div className="flex flex-wrap gap-2 mt-4 mb-4">
               {(p.tags ?? []).map(t => (
-                <span key={t} className="px-2 py-1 rounded-full bg-[#0a0a0a]/5 border border-[#0a0a0a]/20 text-[#6b7280] text-[12px]">#{t}</span>
+                <button
+                  key={t}
+                  onClick={() => go(`library:${p.family ?? "image"}:${encodeURIComponent("#" + t)}`)}
+                  className="px-2 py-1 rounded-full bg-[#0a0a0a]/5 border border-[#0a0a0a]/20 text-[#6b7280] text-[12px] hover:bg-[#0a0a0a]/10 hover:text-[#0a0a0a] transition-colors cursor-pointer"
+                >
+                  #{t}
+                </button>
               ))}
             </div>
           )}
@@ -291,15 +323,15 @@ export function Detail({ id, go, defaultPlatform }: { id: string; go: (p: string
         {/* ── Right: Prompt panel (STICKY) ─────────────────────────────── */}
         <div className="lg:sticky lg:top-8 self-start">
           <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <span className="px-2 py-0.5 rounded-full bg-[#0a0a0a]/5 border border-[#0a0a0a]/20 text-[#6b7280]" style={{ fontSize: "13px" }}>{p.category}</span>
+            <span className="px-2 py-0.5 rounded-full bg-[#0a0a0a]/5 border border-[#0a0a0a]/20 text-[#6b7280] text-[13px]">{p.category}</span>
             {p.subCategory && (
               <>
                 <span className="text-[#6b7280]">·</span>
-                <span className="text-[#6b7280]" style={{ fontSize: "13px" }}>{p.subCategory}</span>
+                <span className="text-[#6b7280] text-[13px]">{p.subCategory}</span>
               </>
             )}
             {p.tested && (
-              <span className="ml-2 px-2 py-0.5 rounded-full bg-[#4FC3F7]/20 text-[#0a0a0a] inline-flex items-center gap-1 text-[12px]">
+              <span className="ml-2 px-2 py-0.5 rounded-full bg-[#4FC3F7]/20 text-[#0a0a0a] inline-flex items-center gap-1 text-[13px]">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#4FC3F7]" />tested
               </span>
             )}
@@ -310,12 +342,21 @@ export function Detail({ id, go, defaultPlatform }: { id: string; go: (p: string
 
           <div className="flex items-center gap-4 mb-6 text-[#6b7280]">
             <span className="inline-flex items-center gap-1.5">
-              <button className="p-1 rounded-md text-[#6b7280] hover:text-[#4FC3F7] hover:bg-[#4FC3F7]/10 transition-colors"><ThumbsUp className="w-4 h-4" /></button>
-              <button className="p-1 rounded-md text-[#6b7280] hover:text-red-500 hover:bg-red-50 transition-colors"><ThumbsDown className="w-4 h-4" /></button>
+              <button
+                onClick={() => castVote("up")}
+                aria-label="This prompt was helpful"
+                className={`p-1 rounded-md transition-colors ${vote === "up" ? "bg-[#4FC3F7]/20 text-[#4FC3F7]" : "text-[#6b7280] hover:text-[#4FC3F7] hover:bg-[#4FC3F7]/10"}`}
+              ><ThumbsUp className="w-4 h-4" /></button>
+              <button
+                onClick={() => castVote("down")}
+                aria-label="This prompt was not helpful"
+                className={`p-1 rounded-md transition-colors ${vote === "down" ? "bg-red-100 text-red-500" : "text-[#6b7280] hover:text-red-500 hover:bg-red-50"}`}
+              ><ThumbsDown className="w-4 h-4" /></button>
             </span>
             <button
               onClick={handleSave}
-              className={`inline-flex items-center gap-1 transition-colors ${saved ? "text-[#0a0a0a]" : "hover:text-[#0a0a0a]"}`}
+              disabled={saving}
+              className={`inline-flex items-center gap-1 transition-colors disabled:cursor-not-allowed ${saved ? "text-[#0a0a0a]" : "hover:text-[#0a0a0a]"}`}
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Heart className={`w-4 h-4 ${saved ? "fill-[#4FC3F7]" : ""}`} />}
               {saved ? "Saved" : "Save"}
@@ -364,7 +405,7 @@ export function Detail({ id, go, defaultPlatform }: { id: string; go: (p: string
           <div className="relative bg-white border-2 border-[#0a0a0a] rounded-2xl p-4 mb-4 shadow-[6px_6px_0_0_#0a0a0a]">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-[11px] text-[#6b7280] uppercase" style={{ fontWeight: 700, letterSpacing: "0.05em" }}>
-                {(isVideoPrompt ? videoPlatforms : platforms).find(pl => pl.key === activePlatformKey)?.name ?? activePlatformKey} prompt
+                {activePlatformName ?? activePlatformKey} prompt
               </span>
               {variableFields.length > 0 && (
                 <span className="text-[11px] text-[#0a0a0a] px-2 py-0.5 rounded-full bg-[#4FC3F7]">
@@ -399,11 +440,13 @@ export function Detail({ id, go, defaultPlatform }: { id: string; go: (p: string
             className="w-full h-12 rounded-full bg-[#4FC3F7] text-[#0a0a0a] inline-flex items-center justify-center gap-2 mb-3"
             style={{ fontWeight: 700, fontSize: "15px" }}
           >
-            <Copy className="w-4 h-4" />Copy {(isVideoPrompt ? videoPlatforms : platforms).find(pl => pl.key === activePlatformKey)?.name ?? ""} Prompt
+            <Copy className="w-4 h-4" />
+            Copy {activePlatformName ? `${activePlatformName} ` : ""}Prompt
           </button>
           <button
             onClick={handleSave}
-            className={`w-full h-11 rounded-full border inline-flex items-center justify-center gap-2 transition-colors ${
+            disabled={saving}
+            className={`w-full h-11 rounded-full border inline-flex items-center justify-center gap-2 transition-colors disabled:cursor-not-allowed ${
               saved
                 ? "bg-[#4FC3F7]/10 border-[#4FC3F7]/30 text-[#0a0a0a]"
                 : "bg-[#0a0a0a]/5 border-[#0a0a0a]/20 text-[#0a0a0a] hover:bg-[#0a0a0a]/10"
@@ -427,8 +470,12 @@ export function Detail({ id, go, defaultPlatform }: { id: string; go: (p: string
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-bold text-white" style={{ background: r.color }}>{r.initials}</div>
                 <div className="text-[#0a0a0a]" style={{ fontWeight: 600 }}>{r.name}</div>
                 <div className="text-[#4FC3F7] text-[13px]">{"★".repeat(r.stars)}</div>
-                <button className="ml-auto text-[#6b7280] hover:text-[#0a0a0a] inline-flex items-center gap-1 text-[13px]">
-                  <ThumbsUp className="w-3 h-3" />Helpful ({r.helpful})
+                <button
+                  onClick={() => toggleHelpful(i)}
+                  aria-pressed={!!markedHelpful[i]}
+                  className={`ml-auto inline-flex items-center gap-1 text-[13px] transition-colors ${markedHelpful[i] ? "text-[#4FC3F7]" : "text-[#6b7280] hover:text-[#0a0a0a]"}`}
+                >
+                  <ThumbsUp className="w-3 h-3" />Helpful ({r.helpful + (markedHelpful[i] ? 1 : 0)})
                 </button>
               </div>
               <p className="text-[#6b7280]">{r.body}</p>
@@ -441,14 +488,22 @@ export function Detail({ id, go, defaultPlatform }: { id: string; go: (p: string
               <h2 className="text-[#0a0a0a] mb-4">Tags</h2>
               <div className="flex flex-wrap gap-2 mb-8">
                 {(p.tags ?? []).map(t => (
-                  <button key={t} onClick={() => go("library:image:#" + t)} className="px-2 py-1 rounded-full bg-[#0a0a0a]/5 border border-[#0a0a0a]/20 text-[#6b7280] text-[13px] hover:bg-[#0a0a0a]/10 hover:text-[#0a0a0a] transition-colors cursor-pointer">#{t}</button>
+                  <button
+                    key={t}
+                    onClick={() => go(`library:${p.family ?? "image"}:${encodeURIComponent("#" + t)}`)}
+                    className="px-2 py-1 rounded-full bg-[#0a0a0a]/5 border border-[#0a0a0a]/20 text-[#6b7280] text-[13px] hover:bg-[#0a0a0a]/10 hover:text-[#0a0a0a] transition-colors cursor-pointer"
+                  >
+                    #{t}
+                  </button>
                 ))}
               </div>
             </>
           )}
           <h2 className="text-[#0a0a0a] mb-4">Author</h2>
           <div className="bg-white border border-[#0a0a0a]/15 rounded-2xl p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#4FC3F7]" />
+            <div className="w-10 h-10 rounded-full bg-[#4FC3F7] flex items-center justify-center text-white text-[13px] font-bold shrink-0">
+              {p.author.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()}
+            </div>
             <div>
               <div className="text-[#0a0a0a]" style={{ fontWeight: 600 }}>{p.author}</div>
               <div className="text-[#6b7280]" style={{ fontSize: "13px" }}>Contributor</div>
@@ -457,17 +512,16 @@ export function Detail({ id, go, defaultPlatform }: { id: string; go: (p: string
         </div>
       </section>
 
-      <section className="mt-16">
-        <h2 className="text-[#0a0a0a] mb-4">Related prompts</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {(isVideoPrompt ? videoLibraryPrompts : imageLibraryPrompts)
-            .filter(x => x.category === p.category && x.id !== p.id)
-            .slice(0, 4)
-            .map(x => (
+      {relatedPrompts.length > 0 && (
+        <section className="mt-16">
+          <h2 className="text-[#0a0a0a] mb-4">Related prompts</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {relatedPrompts.map(x => (
               <PromptCard key={x.id} p={x} onClick={() => go("detail:" + x.id)} hideActions />
             ))}
-        </div>
-      </section>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
