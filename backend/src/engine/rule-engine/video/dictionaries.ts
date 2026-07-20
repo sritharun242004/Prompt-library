@@ -313,22 +313,6 @@ export const STORY_TELLING_BY_CATEGORY: Record<VideoCategory, string> = {
   abstract:  "a complete transformation arc — initial form, the transformation itself, and the resolved final form — read as one continuous idea rather than a random loop",
 }
 
-// ─── Output-format defaults per category ──────────────────────────────────────
-// Fixed per-category values for the sections that don't need real per-idea
-// detection (unlike CAMERA_MOVE/LIGHTING/SUBJECT above, which are keyword-
-// matched against the user's text) — Style, Quality Tag, Audio, and Aspect
-// Ratio. Duration reuses CATEGORY_DEFAULTS[cat].duration above.
-
-export const CATEGORY_OUTPUT_DEFAULTS: Record<string, {
-  aspectRatio: string; qualityTag: string; audio: string; style: string;
-}> = {
-  narrative: { aspectRatio: "16:9", qualityTag: "ultra-realistic, HDR, 4K",              audio: "ambient environmental sound with a subtle emotional score", style: "cinematic narrative" },
-  product:   { aspectRatio: "1:1",  qualityTag: "ultra-realistic, studio-grade 4K",       audio: "clean ambient hum, no dialogue",                            style: "commercial product" },
-  nature:    { aspectRatio: "16:9", qualityTag: "ultra-realistic, HDR, 4K",               audio: "natural ambient sound — wind, water, wildlife",             style: "documentary nature" },
-  action:    { aspectRatio: "16:9", qualityTag: "ultra-realistic, high frame rate, 4K",   audio: "dynamic sound effects with a driving score",                style: "high-energy action" },
-  abstract:  { aspectRatio: "1:1",  qualityTag: "ultra-realistic, render-quality, 4K",    audio: "ambient synth atmosphere",                                  style: "abstract motion graphics" },
-}
-
 // ─── Negative locks (anti-artifact) per category ─────────────────────────────
 // Video diffusion models fail differently than image models: morphing across
 // frames, identity drift, unnatural physics, and frame-rate stutter — none of
